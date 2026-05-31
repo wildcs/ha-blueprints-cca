@@ -2199,6 +2199,10 @@ blueprint:
                   value: "reset_fixed_time"
                 - label: "Reset after a timeout in minutes (see below)"
                   value: "reset_timeout"
+                - label: "Reset above position (see below)"
+                  value: "reset_position_above"
+                - label: "Reset below position (see below)"
+                  value: "reset_position_below"
               multiple: false
               sort: false
               custom_value: false
@@ -2220,6 +2224,16 @@ blueprint:
               min: 0
               max: 1440
               unit_of_measurement: minutes
+        
+        reset_override_position:
+          name: "🗑️ Position above/below reset manual override"
+          description: "Above or below which position should it be reset?"
+          default: 100
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
 
     delay_section:
       description: >-
@@ -2802,9 +2816,12 @@ trigger_variables:
   reset_override_config: !input reset_override_config
   reset_override_time: !input reset_override_time
   reset_override_timeout: !input reset_override_timeout
+  reset_override_position: !input reset_override_position
   is_reset_disabled: "{{ 'reset_disabled' in reset_override_config }}"
   is_reset_fixed_time: "{{ 'reset_fixed_time' in reset_override_config }}"
   is_reset_timeout: "{{ 'reset_timeout' in reset_override_config }}"
+  is_reset_position_above: "{{ 'reset_position_above' in reset_override_config }}"
+  is_reset_position_below: "{{ 'reset_position_below' in reset_override_config }}"
 
   # Force entities
   auto_up_force: !input auto_up_force
@@ -3866,6 +3883,7 @@ triggers:
       minutes: 1
     enabled: "{{ is_cover_tilt_enabled }}"
 
+  # Resets
   - trigger: template
     value_template: "{{ now() >= today_at(reset_override_time) }}"
     enabled: "{{ is_reset_fixed_time }}"
@@ -3888,6 +3906,17 @@ triggers:
     id: "t_reset_timeout"
     for:
       seconds: 2
+
+  - trigger: template
+    value_template: >
+      {% set pos = state_attr(blind, 'current_position') | float(100) %}
+      {% set target_pos = reset_override_position | float(100) %}
+      {{ (is_reset_position_above and pos >= target_pos) or (is_reset_position_below and pos <= target_pos) }}
+    enabled: "{{ is_reset_position_above or is_reset_position_below }}"
+    id: "t_reset_position"
+    for:
+      minutes: 2
+
 
 ################################################################################
 # GLOBAL CONDITIONS
@@ -7182,7 +7211,7 @@ actions:
         conditions:
           - "{{ trigger.id is defined }}"
           - "{{ not is_reset_disabled }}"
-          - "{{ trigger.id in ['t_reset_fixedtime', 't_reset_timeout'] }}"
+          - "{{ trigger.id in ['t_reset_fixedtime', 't_reset_timeout', 't_reset_position'] }}"
         sequence:
           - variables:
               update_values:
